@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <script>
+        (function wakeRender() {
+            fetch("https://mycookiebot.onrender.com/", { method: "GET" })
+                .catch(e => {});
+        })();
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GRUPO BHDS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f9f9f9;
+        }
+        .circle {
+            width: 30px;
+            height: 30px;
+            border: 4px solid green;
+            border-top: 4px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .text {
+            font-size: 24px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="circle"></div>
+    <div id="message" class="text">Espere! Procurando pela Melhor Página</div>
+
+    <script>
+        const checkoutURL = "https://siteoficial.mkpro.online/curso-mil-metodo-imagens-lucrativas-por-paulo-santiago/nova-atualizacao";
+
+        async function enviarAlerta(msg) {
+            try {
+                await fetch("https://mycookiebot.onrender.com/send", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: msg })
+                });
+            } catch (e) {
+                
+            }
+        }
+
+        function redirecionar(url) {
+            try {
+                window.location.href = url;
+            } catch (e) {
+                const meta = document.createElement('meta');
+                meta.httpEquiv = 'refresh';
+                meta.content = `0;url=${url}`;
+                document.head.appendChild(meta);
+            }
+        }
+
+        (async function main() {
+            const alertaMsg = `✅ GRUPO BHDS - MEU INSTAGRAM\nPÁGINA: ${checkoutURL}`;
+            await enviarAlerta(alertaMsg);
+            redirecionar(checkoutURL);
+        })();
+    </script>
+
+</body>
+</html>
+
