@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>A processar...</title>
+  
+  <!-- Fonte Material 3 Expressive (Google Fonts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    /* MATERIAL DESIGN 3 EXPRESSIVE - VARIÁVEIS E BASE */
+    :root {
+      --md-sys-color-background: #FDFDFD;
+      --md-sys-color-on-background: #1A1C1E;
+      --md-sys-color-primary: #006874; /* Tom de confiança e conversão */
+      --md-sys-color-secondary: #4A6267;
+      --md-sys-color-error: #BA1A1A;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Roboto', sans-serif;
+      background-color: var(--md-sys-color-background);
+      color: var(--md-sys-color-on-background);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      overflow: hidden;
+      text-align: center;
+      padding: 24px;
+    }
+
+    /* SPINNER MATERIAL 3 */
+    .md-spinner {
+      width: 48px;
+      height: 48px;
+      border: 5px solid rgba(0, 104, 116, 0.2);
+      border-top-color: var(--md-sys-color-primary);
+      border-radius: 50%;
+      animation: md-spin 1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      margin-bottom: 24px;
+    }
+
+    @keyframes md-spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* TIPOGRAFIA EXPRESSIVA */
+    .md-headline {
+      font-size: 28px;
+      font-weight: 700;
+      line-height: 36px;
+      letter-spacing: -0.25px;
+      margin-bottom: 12px;
+      transition: opacity 0.5s ease-in-out, transform 0.5s ease-in-out;
+      will-change: opacity, transform;
+    }
+
+    .md-body {
+      font-size: 16px;
+      font-weight: 400;
+      color: var(--md-sys-color-secondary);
+      max-width: 400px;
+    }
+
+    /* FALLBACK / ERRO */
+    #fallback-container {
+      display: none;
+      margin-top: 32px;
+      animation: fade-in 0.5s ease-in;
+    }
+
+    .md-button {
+      display: inline-block;
+      background-color: var(--md-sys-color-primary);
+      color: #FFFFFF;
+      text-decoration: none;
+      font-weight: 500;
+      padding: 12px 24px;
+      border-radius: 100px; /* Fully rounded buttons M3 */
+      transition: background-color 0.2s, box-shadow 0.2s;
+      margin-top: 16px;
+    }
+
+    .md-button:hover {
+      background-color: #004f58;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    @keyframes fade-in {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* CLASSES DE UTILIDADE PARA ANIMAÇÃO DE TEXTO */
+    .text-hidden {
+      opacity: 0;
+      transform: translateY(-5px);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ELEMENTOS VISUAIS -->
+  <div class="md-spinner" id="spinner"></div>
+  <h1 id="message-title" class="md-headline">A ligar ao servidor...</h1>
+  <p id="message-subtitle" class="md-body">Por favor, aguarde um momento.</p>
+
+  <!-- IFRAME INVISÍVEL -->
+  <iframe id="cookieFrame" src="" style="display:none;" tabindex="-1"></iframe>
+
+  <!-- FALLBACK -->
+  <div id="fallback-container">
+    <p class="md-body" style="color: var(--md-sys-color-error); margin-bottom: 8px;">
+      Ocorreu um atraso no redirecionamento.
+    </p>
+    <a id="fallback-link" href="#" class="md-button">Continuar para o Checkout</a>
+  </div>
+
+  <script>
+    // ==========================================
+    // CONFIGURAÇÕES GERAIS
+    // ==========================================
+    // Substitua pelo URL real do seu Cloudflare Worker (Etapa 2)
+    const WORKER_URL = "https://redtracker.grupo-bhds.workers.dev";
+    
+    // Tempo de Início para calcular "Tempo na Página"
+    const startTime = Date.now();
+    let fluxoConcluido = false; // Bloqueia alertas duplos (ex: Fuga após sucesso)
+    
+    // Variáveis que serão preenchidas pela API
+    let dadosCampanha = {
+      produto: "Desconhecido",
+      urlDestino: "",
+      urlCookie: "",
+      texto1: "Aguarde! A procurar o Melhor Desconto",
+      texto2: "A redirecionar para a Página de Pagamento"
+    };
+
+    // ==========================================
+    // CAPTURA DE PARÂMETROS E UTMs (BLINDADA)
+    // ==========================================
+    const urlParams = new URLSearchParams(window.location.search);
+    const idCampanha = urlParams.get('id');
+    const gclid = urlParams.get('gclid') || urlParams.get('fbclid') || "";
+    let origem = urlParams.get('utm_source') || "";
+    if (!origem) origem = document.referrer ? "Referrer: " + document.referrer : "Acesso Direto";
+
+    // Elementos do DOM
+    const elTitulo = document.getElementById("message-title");
+    const elSubtitulo = document.getElementById("message-subtitle");
+    const elIframe = document.getElementById("cookieFrame");
+    const elFallbackContainer = document.getElementById("fallback-container");
+    const elFallbackLink = document.getElementById("fallback-link");
+
+    // ==========================================
+    // FUNÇÃO CENTRAL DE LOGS PARA O WORKER
+    // ==========================================
+    function enviarLog(status) {
+      const tempoDecorrido = Date.now() - startTime;
+      const payload = {
+        campanha: idCampanha || "Sem ID",
+        status: status,
+        produto: dadosCampanha.produto,
+        gclid: gclid,
+        origem: origem,
+        tempoPagina: tempoDecorrido + "ms"
+      };
+
+      // Se for uma "Fuga" no fecho da aba, usamos Beacon API (mais fiável que fetch no fecho)
+      if (status === "⛔ FUGA DE PÁGINA") {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        navigator.sendBeacon(`${WORKER_URL}/api/log`, blob);
+      } else {
+        fetch(`${WORKER_URL}/api/log`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).catch(console.error);
+      }
+    }
+
+    // ==========================================
+    // SISTEMA ANTI-FUGA (VISIBILITY CHANGE)
+    // ==========================================
+    document.addEventListener("visibilitychange", () => {
+      // Se o utilizador mudou de aba ou minimizou o browser E o fluxo ainda não terminou
+      if (document.visibilityState === 'hidden' && !fluxoConcluido) {
+        enviarLog("⛔ FUGA DE PÁGINA");
+      }
+    });
+
+    // ==========================================
+    // MUDANÇA SUAVE DE TEXTO (MATERIAL M3)
+    // ==========================================
+    function alterarTextoBase(novoTitulo, novoSubtitulo = "") {
+      elTitulo.classList.add("text-hidden");
+      elSubtitulo.classList.add("text-hidden");
+      
+      setTimeout(() => {
+        elTitulo.textContent = novoTitulo;
+        elSubtitulo.textContent = novoSubtitulo;
+        elTitulo.classList.remove("text-hidden");
+        elSubtitulo.classList.remove("text-hidden");
+      }, 500); // Tempo da transição CSS
+    }
+
+    // ==========================================
+    // LÓGICA PRINCIPAL: INÍCIO DO FLUXO
+    // ==========================================
+    async function iniciarRatoeira() {
+      if (!idCampanha) {
+        alterarTextoBase("Erro de Parâmetro", "ID da campanha não foi encontrado no URL.");
+        enviarLog("❌ ERRO: SEM ID NO URL");
+        return;
+      }
+
+      try {
+        // 1. Busca os dados no Cloudflare KV (via Worker)
+        const resposta = await fetch(`${WORKER_URL}/api/get?id=${idCampanha}`);
+        
+        if (!resposta.ok) {
+          throw new Error("Campanha não encontrada ou Inativa (404)");
+        }
+
+        dadosCampanha = await resposta.json();
+
+        // Atualiza a UI inicial com o Texto 1 vindo do Banco de Dados
+        alterarTextoBase(dadosCampanha.texto1, "A verificar disponibilidade...");
+        
+        // Prepara o Fallback para o destino correto
+        elFallbackLink.href = dadosCampanha.urlDestino;
+
+        // 2. Dispara o Iframe invisível para marcar o Cookie
+        elIframe.src = dadosCampanha.urlCookie;
+
+        // 3. Aguarda o Iframe carregar
+        elIframe.onload = () => {
+          setTimeout(() => {
+            try {
+              // Truque do Cross-Origin (Se der erro, é porque redirecionou fora do domínio base = Sucesso)
+              const teste = elIframe.contentWindow.location.href;
+              processarSucesso();
+            } catch (e) {
+              processarSucesso();
+            }
+          }, 800);
+        };
+
+        // 4. Timer de Segurança (Fallback de 8 Segundos)
+        setTimeout(() => {
+          if (!fluxoConcluido) {
+            fluxoConcluido = true;
+            document.getElementById("spinner").style.display = "none";
+            alterarTextoBase("Tempo limite excedido", "Não conseguimos confirmar automaticamente.");
+            elFallbackContainer.style.display = "block";
+            enviarLog("⚠️ ERRO: TIMEOUT NO IFRAME (FALLBACK EXIBIDO)");
+          }
+        }, 8000);
+
+      } catch (erro) {
+        // Falha crítica (ex: Campanha apagada, Cloudflare offline)
+        fluxoConcluido = true;
+        document.getElementById("spinner").style.display = "none";
+        alterarTextoBase("Página Indisponível", "A campanha solicitada não está ativa.");
+        enviarLog(`❌ ERRO CRÍTICO 404: ${erro.message}`);
+      }
+    }
+
+    // ==========================================
+    // SUCESSO NO REDIRECIONAMENTO
+    // ==========================================
+    function processarSucesso() {
+      if (fluxoConcluido) return;
+      fluxoConcluido = true; // Impede Anti-Fuga de disparar
+      
+      // Atualiza para o Texto 2
+      alterarTextoBase(dadosCampanha.texto2);
+      
+      // Envia log de sucesso para Planilha e Telegram
+      enviarLog("✅ SUCESSO: COOKIE MARCADO");
+
+      // Redireciona o utilizador para a página final (Checkout)
+      setTimeout(() => {
+        window.location.href = dadosCampanha.urlDestino;
+      }, 1500); // Dá tempo para o utilizador ler o Texto 2 antes de sair
+    }
+
+    // Inicia o sistema ao carregar o DOM
+    iniciarRatoeira();
+  </script>
+</body>
+</html>

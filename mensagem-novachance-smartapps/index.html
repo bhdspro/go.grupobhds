@@ -3,7 +3,7 @@
 <head>
     <script>
         (function wakeRender() {
-            fetch("https://mycookiebot.onrender.com/", { method: "GET" })
+            fetch("https://mycookiebotnotification.onrender.com/", { method: "GET" })
                 .catch(e => {});
         })();
     </script>
@@ -51,7 +51,7 @@
 
         async function enviarAlerta(msg) {
             try {
-                await fetch("https://mycookiebot.onrender.com/send", {
+                await fetch("https://mycookiebotnotification.onrender.com/send", {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: msg })
