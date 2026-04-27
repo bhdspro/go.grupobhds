@@ -117,6 +117,7 @@
     
     const startTime = Date.now();
     let fluxoConcluido = false; 
+    let fugaBloqueada = false; // Impede Falsos Positivos de Fuga
     
     let dadosCampanha = {
       produto: "Desconhecido",
@@ -127,8 +128,9 @@
       parametro: "src"
     };
 
+    // Lê os parâmetros. Agora usamos 'red' em vez de 'id'
     const urlParams = new URLSearchParams(window.location.search);
-    const idCampanha = urlParams.get('id');
+    const idCampanha = urlParams.get('red'); 
     const gclid = urlParams.get('gclid') || urlParams.get('fbclid') || "";
     let origem = urlParams.get('utm_source') || "";
     if (!origem) origem = document.referrer ? "Referrer: " + document.referrer : "Acesso Direto";
@@ -154,21 +156,32 @@
       };
 
       if (status === "⛔ FUGA DE PÁGINA") {
-        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        // CORREÇÃO CRÍTICA (Bypass CORS): text/plain garante a entrega pelo sendBeacon
+        const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
         navigator.sendBeacon(`${WORKER_URL}/api/log`, blob);
       } else {
         fetch(`${WORKER_URL}/api/log`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'text/plain' }, // Usa text/plain para evitar Preflight options no Worker
           body: JSON.stringify(payload)
         }).catch(console.error);
       }
     }
 
+    // Ping Inicial - Oculta a cegueira de cliques perdidos
+    enviarLog("🔵 REDTRACKER INICIADO");
+
+    // Regista Fuga (Se o utilizador fechar a janela antes do redirecionamento)
     document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === 'hidden' && !fluxoConcluido) {
-        enviarLog("⛔ FUGA DE PÁGINA");
+      if (document.visibilityState === 'hidden' && !fluxoConcluido && !fugaBloqueada) {
+        enviarLog("⛔ FUGA DE REDTRACKER");
       }
+    });
+
+    // Anula a fuga se o utilizador clicar manualmente no botão de fallback
+    elFallbackLink.addEventListener("click", () => {
+      fugaBloqueada = true;
+      enviarLog("✅ REDIRECIONADO VIA BOTÃO");
     });
 
     function alterarTextoBase(novoTitulo, novoSubtitulo = "") {
@@ -188,13 +201,13 @@
     // ==========================================
     async function iniciarRedTracker() {
       if (!idCampanha) {
-        alterarTextoBase("Erro de Parâmetro", "ID da campanha não foi encontrado no URL.");
-        enviarLog("❌ ERRO: SEM ID NO URL");
+        alterarTextoBase("Erro de Parâmetro", "ID da campanha (red) não foi encontrado.");
+        enviarLog("❌ SEM PARAMETRO RED NO URL");
         return;
       }
 
       try {
-        const resposta = await fetch(`${WORKER_URL}/api/get?id=${idCampanha}`);
+        const resposta = await fetch(`${WORKER_URL}/api/get?red=${idCampanha}`);
         if (!resposta.ok) throw new Error("Campanha não encontrada ou Inativa (404)");
 
         dadosCampanha = await resposta.json();
@@ -219,7 +232,7 @@
             document.getElementById("spinner").style.display = "none";
             alterarTextoBase("Tempo limite excedido", "Ocorreu um atraso na verificação.");
             elFallbackContainer.style.display = "block";
-            enviarLog("⚠️ ERRO: TIMEOUT NO CARREGAMENTO (IFRAME LENTO)");
+            enviarLog("⚠️ TIMEOUT NO CARREGAMENTO (IFRAME LENTO)");
           }
         }, 8000);
 
@@ -227,30 +240,36 @@
         fluxoConcluido = true;
         document.getElementById("spinner").style.display = "none";
         alterarTextoBase("Página Indisponível", "A campanha solicitada não está ativa.");
-        enviarLog(`❌ ERRO CRÍTICO 404: ${erro.message}`);
+        enviarLog(`❌ ERRO CRÍTICO 404 - ${erro.message}`);
       }
     }
 
     // ==========================================
-    // SUCESSO E REPASSE DE PARÂMETROS PARA O CHECKOUT
+    // SUCESSO E REPASSE BLINDADO DE PARÂMETROS
     // ==========================================
     function processarSucesso() {
       if (fluxoConcluido) return;
       fluxoConcluido = true; 
       
       alterarTextoBase(dadosCampanha.texto2);
-      enviarLog("✅ SUCESSO: IFRAME CARREGADO E COOKIE INJETADO");
+      enviarLog("✅ IFRAME CARREGADO E COOKIE INJETADO");
 
-      // Redireciona com repasse de parâmetros
       setTimeout(() => {
         try {
           const destinoFinal = new URL(dadosCampanha.urlDestino);
           
-          // Empacota a Campanha e o GCLID juntos. Exemplo: camp01|GCLID_AQUI
+          // 1. REPASSE TOTAL: Injeta GCLID e UTMs, mas exclui o nosso '?red=' para não sujar a Hotmart
+          urlParams.forEach((valor, chave) => {
+            if (chave !== 'red') {
+              destinoFinal.searchParams.set(chave, valor);
+            }
+          });
+          
+          // 2. EMPACOTAMENTO: Junta a Campanha e o GCLID. Ex: camp01|GCLID_AQUI
           let valorRastreio = idCampanha;
           if (gclid) valorRastreio = idCampanha + "|" + gclid;
 
-          // Adiciona o parâmetro dinâmico da planilha (src, sck, etc)
+          // 3. PARÂMETRO DINÂMICO: src, sck, tid, etc.
           const nomeDoParametro = dadosCampanha.parametro || "src";
           destinoFinal.searchParams.set(nomeDoParametro, valorRastreio);
           
