@@ -3,28 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>A processar...</title>
+  <title>RedTracker</title>
   
-  <!-- Fonte Material 3 Expressive (Google Fonts) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
 
   <style>
-    /* MATERIAL DESIGN 3 EXPRESSIVE - VARIÁVEIS E BASE */
     :root {
       --md-sys-color-background: #FDFDFD;
       --md-sys-color-on-background: #1A1C1E;
-      --md-sys-color-primary: #006874; /* Tom de confiança e conversão */
+      --md-sys-color-primary: #006874; 
       --md-sys-color-secondary: #4A6267;
       --md-sys-color-error: #BA1A1A;
     }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
       font-family: 'Roboto', sans-serif;
@@ -40,7 +34,6 @@
       padding: 24px;
     }
 
-    /* SPINNER MATERIAL 3 */
     .md-spinner {
       width: 48px;
       height: 48px;
@@ -51,12 +44,8 @@
       margin-bottom: 24px;
     }
 
-    @keyframes md-spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
+    @keyframes md-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-    /* TIPOGRAFIA EXPRESSIVA */
     .md-headline {
       font-size: 28px;
       font-weight: 700;
@@ -74,7 +63,6 @@
       max-width: 400px;
     }
 
-    /* FALLBACK / ERRO */
     #fallback-container {
       display: none;
       margin-top: 32px;
@@ -88,7 +76,7 @@
       text-decoration: none;
       font-weight: 500;
       padding: 12px 24px;
-      border-radius: 100px; /* Fully rounded buttons M3 */
+      border-radius: 100px;
       transition: background-color 0.2s, box-shadow 0.2s;
       margin-top: 16px;
     }
@@ -103,61 +91,48 @@
       to { opacity: 1; transform: translateY(0); }
     }
 
-    /* CLASSES DE UTILIDADE PARA ANIMAÇÃO DE TEXTO */
-    .text-hidden {
-      opacity: 0;
-      transform: translateY(-5px);
-    }
+    .text-hidden { opacity: 0; transform: translateY(-5px); }
   </style>
 </head>
 <body>
 
-  <!-- ELEMENTOS VISUAIS -->
   <div class="md-spinner" id="spinner"></div>
   <h1 id="message-title" class="md-headline">A ligar ao servidor...</h1>
   <p id="message-subtitle" class="md-body">Por favor, aguarde um momento.</p>
 
-  <!-- IFRAME INVISÍVEL -->
   <iframe id="cookieFrame" src="" style="display:none;" tabindex="-1"></iframe>
 
-  <!-- FALLBACK -->
   <div id="fallback-container">
     <p class="md-body" style="color: var(--md-sys-color-error); margin-bottom: 8px;">
       Ocorreu um atraso no redirecionamento.
     </p>
-    <a id="fallback-link" href="#" class="md-button">Continuar para o Checkout</a>
+    <a id="fallback-link" href="#" class="md-button">Continuar para a Página</a>
   </div>
 
   <script>
     // ==========================================
-    // CONFIGURAÇÕES GERAIS
+    // CONFIGURAÇÕES GERAIS (REDTRACKER)
     // ==========================================
-    // Substitua pelo URL real do seu Cloudflare Worker (Etapa 2)
-    const WORKER_URL = "https://redtracker.grupo-bhds.workers.dev";
+    const WORKER_URL = "https://redtracker.seu-subdominio.workers.dev";
     
-    // Tempo de Início para calcular "Tempo na Página"
     const startTime = Date.now();
-    let fluxoConcluido = false; // Bloqueia alertas duplos (ex: Fuga após sucesso)
+    let fluxoConcluido = false; 
     
-    // Variáveis que serão preenchidas pela API
     let dadosCampanha = {
       produto: "Desconhecido",
       urlDestino: "",
       urlCookie: "",
       texto1: "Aguarde! A procurar o Melhor Desconto",
-      texto2: "A redirecionar para a Página de Pagamento"
+      texto2: "A redirecionar para a Página de Pagamento",
+      parametro: "src"
     };
 
-    // ==========================================
-    // CAPTURA DE PARÂMETROS E UTMs (BLINDADA)
-    // ==========================================
     const urlParams = new URLSearchParams(window.location.search);
     const idCampanha = urlParams.get('id');
     const gclid = urlParams.get('gclid') || urlParams.get('fbclid') || "";
     let origem = urlParams.get('utm_source') || "";
     if (!origem) origem = document.referrer ? "Referrer: " + document.referrer : "Acesso Direto";
 
-    // Elementos do DOM
     const elTitulo = document.getElementById("message-title");
     const elSubtitulo = document.getElementById("message-subtitle");
     const elIframe = document.getElementById("cookieFrame");
@@ -165,7 +140,7 @@
     const elFallbackLink = document.getElementById("fallback-link");
 
     // ==========================================
-    // FUNÇÃO CENTRAL DE LOGS PARA O WORKER
+    // FUNÇÃO DE LOGS PARA O WORKER
     // ==========================================
     function enviarLog(status) {
       const tempoDecorrido = Date.now() - startTime;
@@ -178,7 +153,6 @@
         tempoPagina: tempoDecorrido + "ms"
       };
 
-      // Se for uma "Fuga" no fecho da aba, usamos Beacon API (mais fiável que fetch no fecho)
       if (status === "⛔ FUGA DE PÁGINA") {
         const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
         navigator.sendBeacon(`${WORKER_URL}/api/log`, blob);
@@ -191,19 +165,12 @@
       }
     }
 
-    // ==========================================
-    // SISTEMA ANTI-FUGA (VISIBILITY CHANGE)
-    // ==========================================
     document.addEventListener("visibilitychange", () => {
-      // Se o utilizador mudou de aba ou minimizou o browser E o fluxo ainda não terminou
       if (document.visibilityState === 'hidden' && !fluxoConcluido) {
         enviarLog("⛔ FUGA DE PÁGINA");
       }
     });
 
-    // ==========================================
-    // MUDANÇA SUAVE DE TEXTO (MATERIAL M3)
-    // ==========================================
     function alterarTextoBase(novoTitulo, novoSubtitulo = "") {
       elTitulo.classList.add("text-hidden");
       elSubtitulo.classList.add("text-hidden");
@@ -213,13 +180,13 @@
         elSubtitulo.textContent = novoSubtitulo;
         elTitulo.classList.remove("text-hidden");
         elSubtitulo.classList.remove("text-hidden");
-      }, 500); // Tempo da transição CSS
+      }, 500); 
     }
 
     // ==========================================
-    // LÓGICA PRINCIPAL: INÍCIO DO FLUXO
+    // LÓGICA DE INJEÇÃO E VERIFICAÇÃO DO COOKIE
     // ==========================================
-    async function iniciarRatoeira() {
+    async function iniciarRedTracker() {
       if (!idCampanha) {
         alterarTextoBase("Erro de Parâmetro", "ID da campanha não foi encontrado no URL.");
         enviarLog("❌ ERRO: SEM ID NO URL");
@@ -227,50 +194,36 @@
       }
 
       try {
-        // 1. Busca os dados no Cloudflare KV (via Worker)
         const resposta = await fetch(`${WORKER_URL}/api/get?id=${idCampanha}`);
-        
-        if (!resposta.ok) {
-          throw new Error("Campanha não encontrada ou Inativa (404)");
-        }
+        if (!resposta.ok) throw new Error("Campanha não encontrada ou Inativa (404)");
 
         dadosCampanha = await resposta.json();
-
-        // Atualiza a UI inicial com o Texto 1 vindo do Banco de Dados
         alterarTextoBase(dadosCampanha.texto1, "A verificar disponibilidade...");
-        
-        // Prepara o Fallback para o destino correto
         elFallbackLink.href = dadosCampanha.urlDestino;
-
-        // 2. Dispara o Iframe invisível para marcar o Cookie
         elIframe.src = dadosCampanha.urlCookie;
 
-        // 3. Aguarda o Iframe carregar
         elIframe.onload = () => {
           setTimeout(() => {
             try {
-              // Truque do Cross-Origin (Se der erro, é porque redirecionou fora do domínio base = Sucesso)
               const teste = elIframe.contentWindow.location.href;
               processarSucesso();
             } catch (e) {
               processarSucesso();
             }
-          }, 800);
+          }, 800); 
         };
 
-        // 4. Timer de Segurança (Fallback de 8 Segundos)
         setTimeout(() => {
           if (!fluxoConcluido) {
             fluxoConcluido = true;
             document.getElementById("spinner").style.display = "none";
-            alterarTextoBase("Tempo limite excedido", "Não conseguimos confirmar automaticamente.");
+            alterarTextoBase("Tempo limite excedido", "Ocorreu um atraso na verificação.");
             elFallbackContainer.style.display = "block";
-            enviarLog("⚠️ ERRO: TIMEOUT NO IFRAME (FALLBACK EXIBIDO)");
+            enviarLog("⚠️ ERRO: TIMEOUT NO CARREGAMENTO (IFRAME LENTO)");
           }
         }, 8000);
 
       } catch (erro) {
-        // Falha crítica (ex: Campanha apagada, Cloudflare offline)
         fluxoConcluido = true;
         document.getElementById("spinner").style.display = "none";
         alterarTextoBase("Página Indisponível", "A campanha solicitada não está ativa.");
@@ -279,26 +232,36 @@
     }
 
     // ==========================================
-    // SUCESSO NO REDIRECIONAMENTO
+    // SUCESSO E REPASSE DE PARÂMETROS PARA O CHECKOUT
     // ==========================================
     function processarSucesso() {
       if (fluxoConcluido) return;
-      fluxoConcluido = true; // Impede Anti-Fuga de disparar
+      fluxoConcluido = true; 
       
-      // Atualiza para o Texto 2
       alterarTextoBase(dadosCampanha.texto2);
-      
-      // Envia log de sucesso para Planilha e Telegram
-      enviarLog("✅ SUCESSO: COOKIE MARCADO");
+      enviarLog("✅ SUCESSO: IFRAME CARREGADO E COOKIE INJETADO");
 
-      // Redireciona o utilizador para a página final (Checkout)
+      // Redireciona com repasse de parâmetros
       setTimeout(() => {
-        window.location.href = dadosCampanha.urlDestino;
-      }, 1500); // Dá tempo para o utilizador ler o Texto 2 antes de sair
+        try {
+          const destinoFinal = new URL(dadosCampanha.urlDestino);
+          
+          // Empacota a Campanha e o GCLID juntos. Exemplo: camp01|GCLID_AQUI
+          let valorRastreio = idCampanha;
+          if (gclid) valorRastreio = idCampanha + "|" + gclid;
+
+          // Adiciona o parâmetro dinâmico da planilha (src, sck, etc)
+          const nomeDoParametro = dadosCampanha.parametro || "src";
+          destinoFinal.searchParams.set(nomeDoParametro, valorRastreio);
+          
+          window.location.href = destinoFinal.toString();
+        } catch(e) {
+          window.location.href = dadosCampanha.urlDestino;
+        }
+      }, 1000); 
     }
 
-    // Inicia o sistema ao carregar o DOM
-    iniciarRatoeira();
+    iniciarRedTracker();
   </script>
 </body>
 </html>
