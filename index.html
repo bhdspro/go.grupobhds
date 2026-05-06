@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RedTracker</title>
+  <title>⚡ RedTracker</title>
   
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -97,7 +97,7 @@
 <body>
 
   <div class="md-spinner" id="spinner"></div>
-  <h1 id="message-title" class="md-headline">A ligar ao servidor...</h1>
+  <h1 id="message-title" class="md-headline">Conectando ao servidor</h1>
   <p id="message-subtitle" class="md-body">Por favor, aguarde um momento.</p>
 
   <iframe id="cookieFrame" src="" style="display:none;" tabindex="-1"></iframe>
@@ -110,30 +110,36 @@
   </div>
 
   <script>
-    // ==========================================
-    // CONFIGURAÇÕES GERAIS (REDTRACKER)
-    // ==========================================
-    const WORKER_URL = "https://redtracker.grupo-bhds.workers.dev";
+    // Configurações Globais
+    const WORKER_URL = "https://api.redtracker.grupobhds.com";
     
     const startTime = Date.now();
     let fluxoConcluido = false; 
-    let fugaBloqueada = false; // Impede Falsos Positivos de Fuga
+    let fugaBloqueada = false;
     
     let dadosCampanha = {
       produto: "Desconhecido",
       urlDestino: "",
       urlCookie: "",
-      texto1: "Aguarde! A procurar o Melhor Desconto",
-      texto2: "A redirecionar para a Página de Pagamento",
+      texto1: "Espere! Procurando pela Melhor Página",
+      texto2: "Redirecionando para Página Oficial",
       parametro: "src"
     };
 
-    // Lê os parâmetros. Agora usamos 'red' em vez de 'id'
+    // Leitura inteligente de parâmetros
     const urlParams = new URLSearchParams(window.location.search);
-    const idCampanha = urlParams.get('red'); 
-    const gclid = urlParams.get('gclid') || urlParams.get('fbclid') || "";
-    let origem = urlParams.get('utm_source') || "";
-    if (!origem) origem = document.referrer ? "Referrer: " + document.referrer : "Acesso Direto";
+    let idCampanha = "";
+    let gclid = "";
+
+    for (const [chave, valor] of urlParams.entries()) {
+      const chaveMinusc = chave.toLowerCase();
+      
+      if (chaveMinusc === 'red') {
+        idCampanha = valor;
+      } else if (chaveMinusc === 'gclid' || chaveMinusc === 'fbclid') {
+        gclid = valor;
+      }
+    }
 
     const elTitulo = document.getElementById("message-title");
     const elSubtitulo = document.getElementById("message-subtitle");
@@ -141,9 +147,6 @@
     const elFallbackContainer = document.getElementById("fallback-container");
     const elFallbackLink = document.getElementById("fallback-link");
 
-    // ==========================================
-    // FUNÇÃO DE LOGS PARA O WORKER
-    // ==========================================
     function enviarLog(status) {
       const tempoDecorrido = Date.now() - startTime;
       const payload = {
@@ -151,37 +154,33 @@
         status: status,
         produto: dadosCampanha.produto,
         gclid: gclid,
-        origem: origem,
+        origem: document.referrer ? "Referrer: " + document.referrer : "Direto",
         tempoPagina: tempoDecorrido + "ms"
       };
 
-      if (status === "⛔ FUGA DE PÁGINA") {
-        // CORREÇÃO CRÍTICA (Bypass CORS): text/plain garante a entrega pelo sendBeacon
+      if (status === "Fuga de carregamento do tracker") {
         const blob = new Blob([JSON.stringify(payload)], { type: 'text/plain' });
         navigator.sendBeacon(`${WORKER_URL}/api/log`, blob);
       } else {
         fetch(`${WORKER_URL}/api/log`, {
           method: 'POST',
-          headers: { 'Content-Type': 'text/plain' }, // Usa text/plain para evitar Preflight options no Worker
+          headers: { 'Content-Type': 'text/plain' }, 
           body: JSON.stringify(payload)
         }).catch(console.error);
       }
     }
 
-    // Ping Inicial - Oculta a cegueira de cliques perdidos
-    enviarLog("🔵 REDTRACKER INICIADO");
+    enviarLog("Iniciando tracker");
 
-    // Regista Fuga (Se o utilizador fechar a janela antes do redirecionamento)
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === 'hidden' && !fluxoConcluido && !fugaBloqueada) {
-        enviarLog("⛔ FUGA DE REDTRACKER");
+        enviarLog("Fuga de carregamento do tracker");
       }
     });
 
-    // Anula a fuga se o utilizador clicar manualmente no botão de fallback
     elFallbackLink.addEventListener("click", () => {
       fugaBloqueada = true;
-      enviarLog("✅ REDIRECIONADO VIA BOTÃO");
+      enviarLog("Redirecionado com botão fallback");
     });
 
     function alterarTextoBase(novoTitulo, novoSubtitulo = "") {
@@ -196,22 +195,19 @@
       }, 500); 
     }
 
-    // ==========================================
-    // LÓGICA DE INJEÇÃO E VERIFICAÇÃO DO COOKIE
-    // ==========================================
     async function iniciarRedTracker() {
       if (!idCampanha) {
-        alterarTextoBase("Erro de Parâmetro", "ID da campanha (red) não foi encontrado.");
-        enviarLog("❌ SEM PARAMETRO RED NO URL");
+        alterarTextoBase("Erro de Parâmetro", "ID da campanha não encontrado!");
+        enviarLog("Nenhum parâmetro red na URL");
         return;
       }
 
       try {
         const resposta = await fetch(`${WORKER_URL}/api/get?red=${idCampanha}`);
-        if (!resposta.ok) throw new Error("Campanha não encontrada ou Inativa (404)");
+        if (!resposta.ok) throw new Error("A campanha solicitada não está ativa.");
 
         dadosCampanha = await resposta.json();
-        alterarTextoBase(dadosCampanha.texto1, "A verificar disponibilidade...");
+        alterarTextoBase(dadosCampanha.texto1, "Verificando disponibilidade");
         elFallbackLink.href = dadosCampanha.urlDestino;
         elIframe.src = dadosCampanha.urlCookie;
 
@@ -232,44 +228,38 @@
             document.getElementById("spinner").style.display = "none";
             alterarTextoBase("Tempo limite excedido", "Ocorreu um atraso na verificação.");
             elFallbackContainer.style.display = "block";
-            enviarLog("⚠️ TIMEOUT NO CARREGAMENTO (IFRAME LENTO)");
+            enviarLog("Tempo de carregamento excedido");
           }
         }, 8000);
 
       } catch (erro) {
         fluxoConcluido = true;
         document.getElementById("spinner").style.display = "none";
-        alterarTextoBase("Página Indisponível", "A campanha solicitada não está ativa.");
-        enviarLog(`❌ ERRO CRÍTICO 404 - ${erro.message}`);
+        alterarTextoBase("Página Indisponível", "O ID solicitado não está ativo!");
+        enviarLog(`Página indisponível: ${erro.message}`);
       }
     }
 
-    // ==========================================
-    // SUCESSO E REPASSE BLINDADO DE PARÂMETROS
-    // ==========================================
     function processarSucesso() {
       if (fluxoConcluido) return;
       fluxoConcluido = true; 
       
       alterarTextoBase(dadosCampanha.texto2);
-      enviarLog("✅ IFRAME CARREGADO E COOKIE INJETADO");
+      enviarLog("Cookie carregado e injetado!");
 
       setTimeout(() => {
         try {
           const destinoFinal = new URL(dadosCampanha.urlDestino);
           
-          // 1. REPASSE TOTAL: Injeta GCLID e UTMs, mas exclui o nosso '?red=' para não sujar a Hotmart
           urlParams.forEach((valor, chave) => {
-            if (chave !== 'red') {
+            if (chave.toLowerCase() !== 'red') {
               destinoFinal.searchParams.set(chave, valor);
             }
           });
           
-          // 2. EMPACOTAMENTO: Junta a Campanha e o GCLID. Ex: camp01|GCLID_AQUI
           let valorRastreio = idCampanha;
           if (gclid) valorRastreio = idCampanha + "|" + gclid;
 
-          // 3. PARÂMETRO DINÂMICO: src, sck, tid, etc.
           const nomeDoParametro = dadosCampanha.parametro || "src";
           destinoFinal.searchParams.set(nomeDoParametro, valorRastreio);
           
